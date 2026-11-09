@@ -370,12 +370,15 @@ func _fly(node: Node3D, to: Transform3D, secs: float, lift := 0.12, to_scale := 
 	var qb := to.basis.orthonormalized().get_rotation_quaternion()
 	var tw := create_tween()
 	tw.tween_method(func(e: float):
+		if not is_instance_valid(node): return
 		var k := ease(e, -2.0)
 		var p := from.origin.lerp(to.origin, k) + Vector3.UP * sin(PI * k) * lift
 		node.global_transform = Transform3D(Basis(qa.slerp(qb, minf(1.0, k * 1.2))).scaled(s0.lerp(to_scale, k)), p), 0.0, 1.0, secs / speed)
 	await tw.finished
 
 func _place(node: Node3D, kind: String, idx: int) -> void:
+	if not is_instance_valid(node): return
+	if idx >= pairs.size(): node.queue_free(); return          # the table was cleared meanwhile (a new match)
 	node.set_meta("jit", randf_range(-0.05, 0.05))
 	if kind == "b": pairs[idx].d = node
 	else: pairs[idx].a = node
@@ -395,7 +398,7 @@ func opponent_plays(seat: int, card: int, kind: String, idx: int) -> void:
 		var from: Vector3 = p.right_target
 		var grip: Vector3 = pick.global_position if pick else from
 		var tw := create_tween()
-		tw.tween_method(func(e): p.right_target = from.lerp(grip, e), 0.0, 1.0, 0.18 / speed)
+		tw.tween_method(func(e): if is_instance_valid(p): p.right_target = from.lerp(grip, e), 0.0, 1.0, 0.18 / speed)
 		await tw.finished
 		if pick:
 			p.cards.erase(pick)
@@ -410,19 +413,20 @@ func opponent_plays(seat: int, card: int, kind: String, idx: int) -> void:
 		for m in [node.get_node("F"), node.get_node("B")]: (m as MeshInstance3D).mesh = q
 		node.scale = Vector3.ONE * FAN_SCALE
 		node.set_meta("flying", true)
-		var hand_follow := func(_e): p.right_target = node.global_position + Vector3.UP * 0.03
+		var hand_follow := func(_e): if is_instance_valid(p) and is_instance_valid(node): p.right_target = node.global_position + Vector3.UP * 0.03
 		var lean0: float = p.lean
 		var tw2 := create_tween().set_parallel()
-		tw2.tween_method(func(e: float): p.lean = lean0 + sin(PI * minf(1.0, e * 1.2)) * 0.3; hand_follow.call(e), 0.0, 1.0, 0.45 / speed)
+		tw2.tween_method(func(e: float): if is_instance_valid(p): p.lean = lean0 + sin(PI * minf(1.0, e * 1.2)) * 0.3; hand_follow.call(e), 0.0, 1.0, 0.45 / speed)
 		_fly(node, tg, 0.45)
 		await tw2.finished
+		if not is_instance_valid(p) or not is_instance_valid(node): return
 		node.set_meta("flying", false)
 		node.global_transform = tg
 		var back_from: Vector3 = p.right_target
 		var rest: Vector3 = p.rest_targets()[1]
 		var tw3 := create_tween()
-		tw3.tween_method(func(e): p.right_target = back_from.lerp(rest, e); p.lean = lean0 * e, 0.0, 1.0, 0.3 / speed)
-		tw3.finished.connect(func(): p.right_busy = false)
+		tw3.tween_method(func(e): if is_instance_valid(p): p.right_target = back_from.lerp(rest, e); p.lean = lean0 * e, 0.0, 1.0, 0.3 / speed)
+		tw3.finished.connect(func(): if is_instance_valid(p): p.right_busy = false)
 	_place(node, kind, idx)
 
 func i_play(card: int, kind: String, idx: int, screen: Vector2) -> void:
@@ -467,15 +471,15 @@ func take(seat: int, screen: Vector2) -> void:
 		var from: Vector3 = p.right_target
 		var mid := Vector3(0, TABLE_Y + 0.05, 0.05)
 		var tw := create_tween()
-		tw.tween_method(func(e): p.right_target = from.lerp(mid, e); p.lean = 0.3 * e, 0.0, 1.0, 0.25 / speed)
+		tw.tween_method(func(e): if is_instance_valid(p): p.right_target = from.lerp(mid, e); p.lean = 0.3 * e, 0.0, 1.0, 0.25 / speed)
 		await tw.finished
 		var home: Transform3D = p.fan_home()
 		for n in cards:
 			_fly(n, Transform3D(home.basis * Basis(Vector3.UP, PI), home.origin), 0.38 + k * 0.03, 0.1, Vector3.ONE * FAN_SCALE)
 			k += 1
 		var tw2 := create_tween()
-		tw2.tween_method(func(e): p.right_target = mid.lerp(p.rest_targets()[1], e); p.lean = 0.3 * (1.0 - e), 0.0, 1.0, 0.42 / speed)
-		tw2.finished.connect(func(): p.right_busy = false)
+		tw2.tween_method(func(e): if is_instance_valid(p): p.right_target = mid.lerp(p.rest_targets()[1], e); p.lean = 0.3 * (1.0 - e), 0.0, 1.0, 0.42 / speed)
+		tw2.finished.connect(func(): if is_instance_valid(p): p.right_busy = false)
 	else:
 		var to := Transform3D(cam.global_basis, cam.project_position(screen, 0.6))
 		for n in cards:
@@ -510,7 +514,7 @@ func nod(seat: int) -> void:
 	var p = people[seat]
 	if p == null: return
 	var tw := create_tween()
-	tw.tween_method(func(e): p.lean = sin(PI * e) * 0.15, 0.0, 1.0, 0.4 / speed)
+	tw.tween_method(func(e): if is_instance_valid(p): p.lean = sin(PI * e) * 0.15, 0.0, 1.0, 0.4 / speed)
 	await tw.finished
 
 func new_match(n: int, my_seat: int, deck_n: int, trump_card: int) -> void:
