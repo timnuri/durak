@@ -56,8 +56,9 @@ func _ready() -> void:
 	rng.randomize()
 	_load_prefs()
 	get_tree().set_auto_accept_quit(false)
-	font_body = load("res://fonts/Inter-SemiBold.otf")
-	font_bold = load("res://fonts/Inter-ExtraBold.otf")
+	var sym: Font = load("res://fonts/DejaVuSans-Bold.ttf")          # ♠♥♦♣ ☰ are not in Inter
+	font_body = load("res://fonts/Inter-SemiBold.otf"); font_body.fallbacks = [sym]
+	font_bold = load("res://fonts/Inter-ExtraBold.otf"); font_bold.fallbacks = [sym]
 	var lora := FontVariation.new(); lora.base_font = load("res://fonts/Lora.ttf"); lora.variation_opentype = {"wght": 700}
 	font_title = lora
 	table = Table3D.new()

@@ -10,15 +10,15 @@ const TABLE_Y := 0.74
 const CW := 0.29
 const CH := 0.435
 const FAN_SCALE := 0.62
-var RX := 0.85
-var RZ := 1.1
+var RX := 0.8
+var RZ := 1.0
 
 const THEMES := {
-	"cabinet": {"name": "Кабинет", "bg": Color("1a0f08"), "surface": "wood", "wood": Color("6a3a1e"), "rim": Color("3e1f0e"), "felt": Color("6a3a1e"),
-		"inlay": Color("d9a54a"), "lamp": Color("ffcf95"), "lamp_e": 9.0, "amb": Color("5a3a24"), "amb_e": 0.35, "body": Color("17110d"), "rim_tint": 0.5,
+	"cabinet": {"name": "Кабинет", "bg": Color("1a0f08"), "surface": "wood", "wood": Color("3a1c0d"), "rim": Color("24110a"), "felt": Color("3a1c0d"),
+		"inlay": Color("c99a45"), "lamp": Color("ffd2a0"), "lamp_e": 6.5, "amb": Color("4a3020"), "amb_e": 0.25, "body": Color("0e0a08"), "rim_tint": 0.35, "photo": true,
 		"bokeh": [Color("ffb45a"), Color("ffd9a0")], "exposure": 1.0, "floor": Color("1e130c"), "wall": Color("24170f")},
 	"casino": {"name": "Казино", "bg": Color("06140f"), "surface": "felt", "wood": Color("5a2c14"), "rim": Color("3a1a0a"), "felt": Color("0f6a38"),
-		"inlay": Color("f0c75a"), "lamp": Color("fff0d8"), "lamp_e": 9.5, "amb": Color("3a5a4a"), "amb_e": 0.4, "body": Color("101512"), "rim_tint": 0.5,
+		"inlay": Color("f0c75a"), "lamp": Color("fff0d8"), "lamp_e": 6.5, "amb": Color("3a5a4a"), "amb_e": 0.4, "body": Color("0b0e0c"), "rim_tint": 0.4,
 		"bokeh": [Color("ffd77a"), Color("fff0c0")], "exposure": 1.05, "floor": Color("0d1a14"), "wall": Color("0f2a20")},
 	"neon": {"name": "Неон", "bg": Color("07031a"), "surface": "felt", "wood": Color("1a1430"), "rim": Color("120c26"), "felt": Color("1c1f5e"),
 		"inlay": Color("3ff0ff"), "lamp": Color("d9c8ff"), "lamp_e": 8.0, "amb": Color("40308a"), "amb_e": 0.45, "body": Color("0d0b1e"), "rim_tint": 0.7,
@@ -53,6 +53,8 @@ var glows: Array = []
 var _tex := {}
 var _models: Array = []
 var _sil_mat: StandardMaterial3D
+var backdrop: MeshInstance3D
+var room_n := 1
 
 # ------------------------------------------------------------------ setup
 func _ready() -> void:
@@ -70,8 +72,8 @@ func set_look(look: Dictionary) -> void:
 	shape = look.get("shape", shape)
 	face = look.get("face", face)
 	back = look.get("back", back)
-	RX = 0.85 if shape == "round" else 0.8
-	RZ = 1.1 if shape == "round" else 1.02
+	RX = 0.8 if shape == "round" else 0.76
+	RZ = 0.9 if shape == "round" else 0.86
 	_build_env(); _build_room(); _build_table()
 	for n in _all_cards(): _refresh_card(n)
 	if seats > 0: _place_people(seats, me)
@@ -101,7 +103,7 @@ func _build_env() -> void:
 	e.glow_intensity = 0.8
 	e.glow_bloom = 0.05
 	e.glow_hdr_threshold = 1.1
-	e.fog_enabled = true
+	e.fog_enabled = not theme.get("photo", false)
 	e.fog_light_color = theme.bg
 	e.fog_density = 0.06 if theme.name != "Светлая" else 0.03
 	e.fog_sky_affect = 0.0
@@ -111,7 +113,7 @@ func _build_env() -> void:
 	lamp.light_color = theme.lamp
 	lamp.light_energy = theme.lamp_e
 	lamp.spot_range = 5.0
-	lamp.spot_angle = 48.0
+	lamp.spot_angle = 40.0 if theme.get("photo", false) else 48.0
 	lamp.spot_angle_attenuation = 1.6
 	lamp.shadow_enabled = true
 	lamp.shadow_blur = 2.0
@@ -129,6 +131,16 @@ func _mat(color: Color, rough := 0.6, tex: String = "", emit := 0.0) -> Standard
 
 func _build_room() -> void:
 	for c in room_root.get_children(): c.queue_free()
+	if backdrop: backdrop.queue_free(); backdrop = null
+	if theme.get("photo", false):
+		backdrop = MeshInstance3D.new(); backdrop.mesh = QuadMesh.new()
+		var bm := StandardMaterial3D.new(); bm.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED; bm.disable_fog = true
+		bm.albedo_texture = load("res://art/rooms/room%d.webp" % room_n)
+		bm.albedo_color = Color(0.85, 0.85, 0.85)
+		backdrop.material_override = bm; backdrop.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+		add_child(backdrop)
+		_build_props()
+		return
 	var floor := MeshInstance3D.new()
 	var pm := PlaneMesh.new(); pm.size = Vector2(16, 16); floor.mesh = pm
 	var fm := _mat(theme.floor, 0.9); fm.disable_receive_shadows = true
@@ -154,13 +166,30 @@ func _build_room() -> void:
 		var ol := OmniLight3D.new(); ol.light_color = col; ol.light_energy = 0.6; ol.omni_range = 2.5; ol.position = s.position
 		room_root.add_child(ol)
 
+## things on the table, like in the reference: a card box and a tin
+func _build_props() -> void:
+	var box := MeshInstance3D.new(); var bm := BoxMesh.new(); bm.size = Vector3(0.2, 0.07, 0.28); box.mesh = bm
+	var m := _mat(Color("1a0f0a"), 0.35); m.metallic = 0.2
+	box.material_override = m
+	var lid := MeshInstance3D.new(); var q := QuadMesh.new(); q.size = Vector2(0.17, 0.25); lid.mesh = q
+	var lm := _card_mat(_texture("res://cards/backs/gold.webp")); lid.material_override = lm
+	lid.rotation = Vector3(-PI / 2, 0, 0); lid.position.y = 0.0355; box.add_child(lid)
+	box.position = Vector3(-RX * 0.78, TABLE_Y + 0.035, RZ * 0.42); box.rotation.y = 0.35
+	room_root.add_child(box)
+	var tin := MeshInstance3D.new(); var cm := CylinderMesh.new(); cm.top_radius = 0.09; cm.bottom_radius = 0.09; cm.height = 0.07; tin.mesh = cm
+	var tm := _mat(Color("2a2420"), 0.25); tm.metallic = 0.85; tin.material_override = tm
+	var rimm := MeshInstance3D.new(); var tr := TorusMesh.new(); tr.inner_radius = 0.085; tr.outer_radius = 0.095; rimm.mesh = tr
+	var gm := _mat(Color("b88a3a"), 0.3); gm.metallic = 0.9; rimm.material_override = gm; rimm.position.y = 0.035; tin.add_child(rimm)
+	tin.position = Vector3(RX * 0.8, TABLE_Y + 0.035, RZ * 0.38)
+	room_root.add_child(tin)
+
 func _surface_mat() -> StandardMaterial3D:
 	if theme.surface == "felt":
 		var m := _mat(theme.felt, 0.95, "res://art/felt.webp")
 		m.uv1_scale = Vector3(3, 3, 3)
 		return m
-	var w := _mat(theme.wood, 0.35, "res://art/wood.webp")
-	w.clearcoat_enabled = true; w.clearcoat = 0.6; w.clearcoat_roughness = 0.2
+	var w := _mat(theme.wood, 0.28, "res://art/wood.webp")
+	w.clearcoat_enabled = true; w.clearcoat = 1.0; w.clearcoat_roughness = 0.12
 	return w
 func _rim_mat() -> StandardMaterial3D:
 	var m := _mat(theme.rim, 0.32, "res://art/wood.webp")
@@ -252,7 +281,8 @@ func _card_mat(tex: Texture2D) -> StandardMaterial3D:
 	m.albedo_texture = tex
 	m.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA_SCISSOR
 	m.alpha_scissor_threshold = 0.5
-	m.roughness = 0.55
+	m.roughness = 0.7
+	m.albedo_color = Color(0.9, 0.88, 0.84)
 	m.texture_filter = BaseMaterial3D.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS_ANISOTROPIC
 	return m
 
@@ -518,6 +548,9 @@ func nod(seat: int) -> void:
 	await tw.finished
 
 func new_match(n: int, my_seat: int, deck_n: int, trump_card: int) -> void:
+	if theme.get("photo", false):
+		room_n = randi() % 4 + 1
+		_build_room()
 	for p in pairs:
 		if p.a: p.a.queue_free()
 		if p.d: p.d.queue_free()
@@ -580,50 +613,32 @@ func frame_camera() -> void:
 	if cam == null or seats == 0: return
 	var vs := get_viewport().get_visible_rect().size
 	var aspect := vs.x / maxf(vs.y, 1.0)
-	var pitch := deg_to_rad(36.0 if seats <= 2 else (40.0 if seats == 3 else 44.0))
-	if aspect > 1.0: pitch = deg_to_rad(34.0)
-	var look := Vector3(0, TABLE_Y, 0.0)
-	var dir := Vector3(0, -sin(pitch), -cos(pitch))
-	cam.fov = 46.0
-	cam.keep_aspect = Camera3D.KEEP_WIDTH if aspect < 1.0 else Camera3D.KEEP_HEIGHT
-	cam.v_offset = 0.0
-	var pts := []
-	for k in seats:
-		if k == me: continue
-		var sp := seat_point(k)
-		pts.append(sp + Vector3.UP * 1.5)
-		pts.append(sp * 0.8 + Vector3.UP * (TABLE_Y + 0.3))
-	pts.append_array([Vector3(-RX - 0.05, TABLE_Y, 0), Vector3(RX + 0.05, TABLE_Y, 0), Vector3(0, TABLE_Y, RZ * 0.6), Vector3(0, TABLE_Y, -RZ - 0.05)])
-	var avail := vs.y - view_bottom - 16.0
-	# try a few angles and keep the one that shows the table biggest
-	var best := 99.0; var best_dir := dir; var best_tall := -1.0
-	for deg in ([30.0, 36.0, 42.0, 48.0, 54.0] if aspect < 1.0 else [30.0, 36.0]):
-		var pr := deg_to_rad(deg)
-		var dd := Vector3(0, -sin(pr), -cos(pr))
-		var lo := 1.2; var hi := 14.0; var found := 99.0
-		for it in 20:
-			var d := (lo + hi) / 2.0
-			cam.global_transform = Transform3D(Basis.looking_at(dd), look - dd * d)
-			var mnx := 1e9; var mxx := -1e9; var mny := 1e9; var mxy := -1e9
-			for p in pts:
-				var sp: Vector2 = cam.unproject_position(p)
-				mnx = minf(mnx, sp.x); mxx = maxf(mxx, sp.x); mny = minf(mny, sp.y); mxy = maxf(mxy, sp.y)
-			if mnx >= vs.x * 0.04 and mxx <= vs.x * 0.96 and (mxy - mny) <= avail: found = d; hi = d
-			else: lo = d
-		if found > 50.0: continue
-		# score: how tall the table looks on the screen (a flat angle squeezes it)
-		cam.global_transform = Transform3D(Basis.looking_at(dd), look - dd * found)
-		var tall: float = cam.unproject_position(Vector3(0, TABLE_Y, RZ)).y - cam.unproject_position(Vector3(0, TABLE_Y, -RZ)).y
-		if tall > best_tall: best_tall = tall; best = found; best_dir = dd
-	dir = best_dir
-	cam.global_transform = Transform3D(Basis.looking_at(dir), look - dir * best)
-	# shift the picture so its top sits near the top of the screen (h/v offset are in world units at distance 1)
-	var top := 1e9
-	for p in pts: top = minf(top, cam.unproject_position(p).y)
-	var want := 118.0
-	var px_per_unit := vs.x / (2.0 * tan(deg_to_rad(cam.fov) / 2.0)) if cam.keep_aspect == Camera3D.KEEP_WIDTH else vs.y / (2.0 * tan(deg_to_rad(cam.fov) / 2.0))
-	cam.v_offset = (top - want) / px_per_unit * best * 0.0 + 0.0
-	cam.global_position -= cam.global_basis.y * ((top - want) / px_per_unit) * best
+	# sitting at the table: eyes over the near edge, looking down across the table (like the reference photo)
+	var portrait := aspect < 1.0
+	var c: Dictionary = {"y": 1.36, "z": RZ + 0.5, "fov": 66.0} if portrait else {"y": 1.3, "z": RZ + 0.6, "fov": 52.0}
+	var eye := Vector3(0, c.y, c.z)
+	cam.keep_aspect = Camera3D.KEEP_WIDTH if portrait else Camera3D.KEEP_HEIGHT
+	cam.fov = c.fov
+	cam.v_offset = 0.0; cam.h_offset = 0.0
+	# tilt so that the table centre lands in the free space above my cards
+	var want := (vs.y - view_bottom) * 0.58 + 30.0
+	var lo := -0.3; var hi := 1.6
+	for it in 24:
+		var ly := (lo + hi) / 2.0
+		cam.global_transform = Transform3D(Basis.looking_at(Vector3(0, TABLE_Y, -ly) - eye), eye)
+		var y: float = cam.unproject_position(Vector3(0, TABLE_Y, 0)).y
+		if y > want: lo = ly
+		else: hi = ly
+	if backdrop:
+		var fwd := -cam.global_basis.z
+		var d := 9.0
+		var hw := d * tan(deg_to_rad(cam.fov) / 2.0) * (1.0 if portrait else aspect) * 1.25
+		var hh := hw / aspect * 1.0
+		var tex: Texture2D = (backdrop.material_override as StandardMaterial3D).albedo_texture
+		var ta := float(tex.get_width()) / float(tex.get_height())
+		var w := maxf(hw * 2.0, hh * 2.0 * ta)
+		(backdrop.mesh as QuadMesh).size = Vector2(w, w / ta)
+		backdrop.global_transform = Transform3D(cam.global_basis, cam.global_position + fwd * d + cam.global_basis.y * (w / ta * 0.08))
 	for p in people:
 		if p:
 			var rt: Array = p.rest_targets()
