@@ -1,0 +1,16 @@
+name: get-godot (временно, для Claude)
+on:
+  push:
+    branches: [get-godot]
+permissions:
+  contents: write
+jobs:
+  fetch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: |
+          curl -sSL -o godot.zip "https://github.com/godotengine/godot/releases/download/4.7.2-stable/Godot_v4.7.2-stable_linux.x86_64.zip"
+          ls -la godot.zip
+          git config user.name ci; git config user.email ci@example.com
+          git add godot.zip; git commit -m "godot binary"; git push
