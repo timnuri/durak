@@ -1,0 +1,99 @@
+name: Сборка игры
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  pages: write
+  id-token: write
+
+concurrency:
+  group: build
+  cancel-in-progress: true
+
+env:
+  GODOT_VERSION: 4.7.2
+
+jobs:
+  web:
+    name: Проверка и версия для браузера
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Кэш Godot
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/godot
+            ~/.local/share/godot/export_templates
+          key: godot-${{ env.GODOT_VERSION }}
+      - name: Скачать Godot
+        run: tools/ci_install_godot.sh
+      - name: Импорт
+        run: ~/godot/godot --headless --import --path game || true
+      - name: Проверка правил и ботов
+        run: ~/godot/godot --headless --path game -s res://tests/test_core.gd 2>&1 | tee /tmp/test.log; grep -q "RESULT OK" /tmp/test.log
+      - name: Экспорт Web
+        run: |
+          mkdir -p build/web
+          ~/godot/godot --headless --path game --export-release "Web" ../build/web/index.html
+          ls -la build/web
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: build/web
+
+  deploy:
+    name: Публикация ссылки
+    needs: web
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4
+
+  android:
+    name: Приложение Android (APK)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Кэш Godot
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/godot
+            ~/.local/share/godot/export_templates
+          key: godot-${{ env.GODOT_VERSION }}
+      - name: Скачать Godot
+        run: tools/ci_install_godot.sh
+      - name: Настроить Android SDK для Godot
+        run: |
+          mkdir -p ~/.config/godot
+          SDK="${ANDROID_SDK_ROOT:-$ANDROID_HOME}"
+          JDK="${JAVA_HOME_17_X64:-$JAVA_HOME}"
+          printf '[gd_resource type="EditorSettings" format=3]\n\n[resource]\nexport/android/android_sdk_path = "%s"\nexport/android/java_sdk_path = "%s"\n' "$SDK" "$JDK" > ~/.config/godot/editor_settings-4.7.tres
+      - name: Импорт
+        run: ~/godot/godot --headless --import --path game || true
+      - name: Экспорт APK
+        env:
+          GODOT_ANDROID_KEYSTORE_RELEASE_PATH: ${{ github.workspace }}/android/release.keystore
+          GODOT_ANDROID_KEYSTORE_RELEASE_USER: durak
+          GODOT_ANDROID_KEYSTORE_RELEASE_PASSWORD: durak2026
+        run: |
+          mkdir -p build/android
+          ~/godot/godot --headless --path game --export-release "Android" ../build/android/durak.apk
+          ls -la build/android
+          test -f build/android/durak.apk
+      - name: Выложить APK в Releases
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release delete latest --yes --cleanup-tag || true
+          gh release create latest build/android/durak.apk \
+            --title "Дурак — свежая сборка" \
+            --notes "Сборка из коммита ${GITHUB_SHA::7}. Скачайте durak.apk и установите на телефон." \
+            --target "$GITHUB_SHA"
