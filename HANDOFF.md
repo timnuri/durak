@@ -31,6 +31,18 @@
   - символы ♠♥♦♣ и ☰ берутся из DejaVu Sans Bold (в Inter их нет — в браузере были квадратики).
 - Остальные темы (Казино, Неон, Светлая) — без фото, с цветным фоном.
 
+## Отзыв Тима после версии с фото-фоном (09.11.2026, 10:19) и план
+Тим: «фон комнаты огромный, стол и карты скучные, модели — чёрные манекены, карты плохо видно из-за ракурса, нет реалистичности; выглядит как Java-игра для кнопочных телефонов». В шутере (`timnuri/shooter3d`) красиво: глубина, свет, графика.
+Почему шутер красивый: профессиональный уровень из `godotengine/tps-demo` (PBR-текстуры, карты нормалей, запечённый свет) + рендер `forward_plus` / `mobile` (на вебе `gl_compatibility`). В Дураке всё самодельное из простых фигур + `gl_compatibility`.
+План переделки (следующий шаг):
+1. Рендер как в шутере: `rendering_method="forward_plus"`, `.mobile="mobile"`, `.web="gl_compatibility"`; на Android — свечение, размытие фона (DOF), мягкие тени, HDRI-отражения.
+2. Настоящая 3D-комната вместо фото-плоскости: модели из `KhronosGroup/glTF-Sample-Assets` (качают через git, сайты типа polyhaven/kenney заблокированы): SheenWoodLeatherSofa, GlamVelvetSofa, ChairDamaskPurplegold / SheenChair (стулья у стола), StainedGlassLamp (лампа), GlassHurricaneCandleHolder (свеча), DiffuseTransmissionTeacup (чашка), GlassVaseFlowers / DiffuseTransmissionPlant (растения), Lantern. Лицензии CC-BY/CC0 — указать в README.
+   HDRI для отражений: `godotengine/godot-demo-projects/3d/material_testers/backgrounds/lobby.hdr` или `night.hdr`; текстура дерева там же (`test_materials/texture_wood.png`).
+3. Стол: PBR-дерево с картой нормалей и блеском, стулья вокруг.
+4. Ракурс: ниже наклон, чтобы карты на столе читались (как в старом 2D: крупные карты в центре), фон размыт DOF.
+5. Соперники: не голые манекены — либо модели в одежде (искать на GitHub: Mixamo-персонажи из примеров three.js — Michelle с родной текстурой, Soldier; readyplayer.me — проверить лицензию), либо показывать как на фото: руки с веером в фокусе, тело размыто и в тени.
+Важно: экраны с рендером `mobile` нельзя снять здесь (нет Vulkan), проверять по снимкам Тима с телефона; веб-версия остаётся `gl_compatibility`.
+
 ## Как проверять у себя (в чате Claude)
 - Godot скачивается с GitHub releases: `tools/ci_install_godot.sh`.
 - Снимки экрана: `xvfb-run ~/godot/godot --rendering-driver opengl3 --path game -s res://tests/shots.gd --resolution 390x844 -- /tmp/out cabinet 3`.
