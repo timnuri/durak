@@ -14,8 +14,8 @@
 
 - `game/` — проект Godot.
   - `scripts/core.gd` — правила, проверка настроек и компьютерные соперники (без экрана).
-  - `scripts/table3d.gd` — 3D-стол: комната, лампа, стол, карты, анимации.
-  - `scripts/person.gd` — соперник: модель человека со скелетом, сидит, держит веер карт, тянется рукой к столу.
+  - `scripts/table3d.gd` — 3D-комната (мебель, свет, отражения, размытие фона), квадратный стол, карты, анимации.
+  - `scripts/person.gd` — соперник: тёмный силуэт человека со скелетом, сидит в кресле, держит веер карт, тянется рукой к столу.
   - `scripts/main.gd` — меню, настройки, оформление, ход партии, мои карты.
   - `tests/` — проверки (правила против эталона, партии ботов, снимки экрана).
 - `tools/make_traces.js` — записывает эталонные партии из старого проверенного ядра на JavaScript.
@@ -24,6 +24,10 @@
 
 ## Авторы и лицензии
 
-- Модели людей Xbot и Michelle — Mixamo (Adobe), из примеров three.js; используются внутри игры.
+- Модель человека Xbot — Mixamo (Adobe), из примеров three.js; используется внутри игры (одежда раскрашивается в коде).
+- Мебель и растения — [glTF Sample Assets](https://github.com/KhronosGroup/glTF-Sample-Assets), CC-BY 4.0 / CC0:
+  кресла ChairDamaskPurplegold и SheenChair, диван GlamVelvetSofa (© 2021 Wayfair LLC), растение DiffuseTransmissionPlant
+  (© 2024 Darmstadt Graphics Group GmbH), ваза с цветами GlassVaseFlowers. Текстуры уменьшены (`tools/shrink_glb.py`).
+- HDR-панорама lobby.hdr, текстуры дерева и шерсти — [godot-demo-projects](https://github.com/godotengine/godot-demo-projects) (MIT), уменьшены.
 - Карты: русская колода (А. Шарлемань, 1862, общественное достояние, набор OpenFool), покерная колода (Byron Knoll, общественное достояние).
 - Шрифты Inter и Lora — SIL Open Font License.

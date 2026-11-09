@@ -13,7 +13,7 @@ const UI := {
 	"day": {"bg": Color("f3e3c8"), "panel": Color(1, 0.98, 0.94, 0.94), "line": Color(0.55, 0.35, 0.12, 0.3), "text": Color("3a2410"), "muted": Color("7a5a3a"), "acc": Color("ff8a1f"), "acc_text": Color("ffffff")},
 }
 
-var pref := {"theme": "cabinet", "shape": "round", "face": "vt", "back": "blue", "speed": 1.0, "sort": "suit", "sound": true, "hints": true,
+var pref := {"theme": "cabinet", "shape": "square", "face": "vt", "back": "blue", "speed": 1.0, "sort": "suit", "sound": true, "hints": true,
 	"opp": 1, "level": "normal", "preset": "classic", "rules": {}, "deckSize": 36, "handSize": 6}
 var table: Node3D
 var ui: Control
@@ -87,6 +87,7 @@ func _load_prefs() -> void:
 		if typeof(d) == TYPE_DICTIONARY:
 			for k in d: pref[k] = d[k]
 	if not UI.has(pref.theme): pref.theme = "cabinet"
+	pref.shape = "square"                  # the table is always square now
 func _save_prefs() -> void:
 	var f := FileAccess.open(PREFS, FileAccess.WRITE); f.store_var(pref)
 
@@ -426,9 +427,6 @@ func _build_look() -> void:
 		b.pressed.connect(func(): _snd("click"); pref.theme = key; _save_prefs(); _apply_look(); _rebuild())
 		grid.add_child(b)
 	gt.add_child(grid); c.add_child(gt.get_meta("panel"))
-	var gs := _group("Стол")
-	gs.add_child(_seg([["round", "Овальный"], ["square", "Прямоугольный"]], pref.shape, func(x): pref.shape = x; _save_prefs(); _apply_look(); _rebuild()))
-	c.add_child(gs.get_meta("panel"))
 	var gf := _group("Карты")
 	var hf := HBoxContainer.new(); hf.add_theme_constant_override("separation", 14)
 	for f in [["vt", "Винтаж"], ["ru", "Русские"], ["pk", "Покерные"]]:
@@ -701,11 +699,22 @@ func _build_labels() -> void:
 	_place_labels()
 func _place_labels() -> void:
 	if labels_box == null or not is_instance_valid(labels_box): return
-	for v in labels_box.get_children():
+	var placed: Array = []                       # labels must not cover each other: a later one moves down
+	var items := labels_box.get_children()
+	items.sort_custom(func(a, b): return table.label_pos(a.get_meta("p")).y < table.label_pos(b.get_meta("p")).y)
+	for v in items:
 		var pos: Vector2 = table.label_pos(v.get_meta("p"))
 		var sz: Vector2 = v.get_combined_minimum_size()
 		v.size = sz
-		v.position = Vector2(clampf(pos.x - sz.x / 2, 8, _vs().x - sz.x - 8), maxf(130.0, pos.y - sz.y))
+		var r := Rect2(Vector2(clampf(pos.x - sz.x / 2, 8, _vs().x - sz.x - 8), maxf(130.0, pos.y - sz.y)), sz)
+		var moved := true
+		while moved:
+			moved = false
+			for q in placed:
+				if r.grow(3).intersects(q):
+					r.position.y = q.end.y + 4; moved = true
+		placed.append(r)
+		v.position = r.position
 func _say(p: int, text: String) -> void:
 	if p == ME or labels_box == null: return
 	for v in labels_box.get_children():

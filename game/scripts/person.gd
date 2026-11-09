@@ -1,6 +1,6 @@
 extends Node3D
-## One opponent at the table: a real human model (Mixamo rig) posed sitting, dark like a silhouette in the lamp
-## light, holding a fan of cards in both hands. The arms follow targets (two-bone IK), so the right hand can
+## One opponent at the table: a real human model (Mixamo rig) posed sitting, dressed (sweater, trousers, shoes,
+## skin and hair are painted onto the model by bone), holding a fan of cards in both hands. The arms follow targets (two-bone IK), so the right hand can
 ## reach anywhere on the table; the spine leans with it.
 
 const P := "mixamorig_"
@@ -20,13 +20,25 @@ var seat_height := 0.47
 var _rest_dir := {}
 var _len := {}
 
-func setup(model: PackedScene, mat: Material, height_scale: float) -> void:
+## dressed meshes are made once per look and model mesh
+static var _dressed := {}
+
+func setup(model: PackedScene, look: Dictionary, height_scale: float, rim := 0.25) -> void:
 	var m := model.instantiate()
 	add_child(m)
 	m.scale = Vector3.ONE * height_scale
 	m.rotation.y = MODEL_YAW
 	sk = _find_skeleton(m)
+	var mat := StandardMaterial3D.new()
+	# a dark silhouette in the lamp light: the clothes only hint at their colours, the edges catch the light
+	mat.vertex_color_use_as_albedo = true; mat.vertex_color_is_srgb = true
+	mat.albedo_color = Color(0.24, 0.24, 0.24)
+	mat.roughness = 0.9
+	mat.rim_enabled = true; mat.rim = 0.6 + rim; mat.rim_tint = 0.8
+	mat.normal_enabled = true; mat.normal_texture = load("res://art/wool_n.jpg"); mat.normal_scale = 0.35
+	mat.uv1_triplanar = true; mat.uv1_scale = Vector3(14, 14, 14)
 	for mi in _meshes(m):
+		mi.mesh = _dress(mi, look)
 		mi.material_override = mat
 		mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_ON
 	var ap := m.find_child("AnimationPlayer", true, false)
@@ -51,6 +63,59 @@ func setup(model: PackedScene, mat: Material, height_scale: float) -> void:
 	var hips_y := (sk.global_transform * sk.get_bone_global_rest(bones["Hips"]).origin).y - global_position.y
 	m.position.y = seat_height - hips_y
 	add_child(fan)
+
+## paint the clothes into vertex colours: by the bone that moves each vertex most (the model stands in T-pose, metres)
+func _dress(mi: MeshInstance3D, look: Dictionary) -> Mesh:
+	var key := str(mi.mesh.get_rid().get_id()) + str(look)
+	if _dressed.has(key): return _dressed[key]
+	var src := mi.mesh
+	var out := ArrayMesh.new()
+	for si in src.get_surface_count():
+		var a: Array = src.surface_get_arrays(si)
+		var v: PackedVector3Array = a[Mesh.ARRAY_VERTEX]
+		var bo: PackedInt32Array = a[Mesh.ARRAY_BONES]
+		var we: PackedFloat32Array = a[Mesh.ARRAY_WEIGHTS]
+		var per := bo.size() / maxi(v.size(), 1)
+		var region := {}                                       # bind index -> part
+		for b in mi.skin.get_bind_count():
+			var nm := String(mi.skin.get_bind_name(b))
+			if nm == "": nm = sk.get_bone_name(mi.skin.get_bind_bone(b))
+			nm = nm.replace(P, "")
+			var part := "top"
+			if nm.contains("Hand"): part = "skin"
+			elif nm.begins_with("Head") or nm == "Neck": part = "head"
+			elif nm.contains("Foot") or nm.contains("Toe"): part = "shoes"
+			elif nm.contains("UpLeg") or nm.ends_with("Leg"): part = "pants"
+			elif nm == "Hips": part = "hips"
+			region[b] = part
+		var col := PackedColorArray(); col.resize(v.size())
+		var dom := PackedStringArray(); dom.resize(v.size())
+		var hlo := Vector3(INF, INF, INF); var hhi := -hlo           # the head's box (for hair, eyes)
+		for i in v.size():
+			var best := 0; var bw := -1.0
+			for j in per:
+				if we[i * per + j] > bw: bw = we[i * per + j]; best = bo[i * per + j]
+			dom[i] = region.get(best, "top")
+			if dom[i] == "head" and v[i].y > 1.55: hlo = hlo.min(v[i]); hhi = hhi.max(v[i])
+		var cz := (hlo.z + hhi.z) / 2.0
+		for i in v.size():
+			var part: String = dom[i]
+			var p := v[i]
+			if part == "hips": part = "top" if p.y > 0.97 else "pants"
+			if part == "head":
+				var hy := (p.y - hlo.y) / maxf(hhi.y - hlo.y, 0.01)    # 0 chin .. 1 crown
+				if hy > 0.8 or (p.z < cz - 0.01 and hy > 0.25) or (absf(p.x) > (hhi.x - hlo.x) * 0.42 and hy > 0.55): part = "hair"
+				elif p.y < 1.5: part = "collar"
+				else: part = "skin"
+			if part == "top" and absf(p.x) < 0.07 and p.y > 1.42 and p.z > 0.02: part = "collar"
+			var c: Color = look.get(part, look.top)
+			col[i] = c
+		a[Mesh.ARRAY_COLOR] = col
+		var flags: int = src.surface_get_format(si) & ~Mesh.ARRAY_FORMAT_VERTEX & ~Mesh.ARRAY_FORMAT_NORMAL & ~Mesh.ARRAY_FORMAT_TANGENT
+		flags = flags & (Mesh.ARRAY_FLAG_USE_8_BONE_WEIGHTS | Mesh.ARRAY_FLAG_USE_DYNAMIC_UPDATE)
+		out.add_surface_from_arrays(src.surface_get_primitive_type(si), a, [], {}, flags)
+	_dressed[key] = out
+	return out
 
 func _find_skeleton(n: Node) -> Skeleton3D:
 	if n is Skeleton3D: return n
@@ -116,6 +181,7 @@ func _process(delta: float) -> void:
 	var fwd := _dir_to_sk(global_basis.z)          # the model faces +Z, towards the table
 	var up := _dir_to_sk(Vector3.UP)
 	sk.reset_bone_poses()
+	sk.set_bone_pose_scale(bones["Head"], Vector3(1.08, 0.9, 1.04))     # a rounder, more human head than the mannequin's
 	_gc.clear()
 	# legs: thighs forward under the table, shins down
 	for side in ["Left", "Right"]:
